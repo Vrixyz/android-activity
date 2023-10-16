@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, BufReader};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::os::unix::prelude::*;
@@ -925,18 +925,17 @@ pub unsafe extern "C" fn _rust_glue_entry(native_app: *mut ffi::android_app) {
             File::from_raw_fd(logpipe[0])
         };
 
-        thread::spawn(move || {
+        thread::spawn(move || -> io::Result<()> {
             let tag = CStr::from_bytes_with_nul(b"RustStdoutStderr\0").unwrap();
             let mut reader = BufReader::new(file);
             let mut buffer = String::new();
             loop {
                 buffer.clear();
-                if let Ok(len) = reader.read_line(&mut buffer) {
-                    if len == 0 {
-                        break;
-                    } else if let Ok(msg) = CString::new(buffer.clone()) {
-                        android_log(Level::Info, tag, &msg);
-                    }
+                let len = reader.read_line(&mut buffer)?;
+                if len == 0 {
+                    break Ok(());
+                } else if let Ok(msg) = CString::new(buffer.clone()) {
+                    android_log(Level::Info, tag, &msg);
                 }
             }
         });

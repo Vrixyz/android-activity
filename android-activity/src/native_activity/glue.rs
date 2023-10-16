@@ -5,7 +5,7 @@
 use std::{
     ffi::{CStr, CString},
     fs::File,
-    io::{BufRead, BufReader},
+    io::{self, BufRead, BufReader},
     ops::Deref,
     os::unix::prelude::{FromRawFd, RawFd},
     panic::catch_unwind,
@@ -845,18 +845,17 @@ extern "C" fn ANativeActivity_onCreate(
             File::from_raw_fd(logpipe[0])
         };
 
-        std::thread::spawn(move || {
+        std::thread::spawn(move || -> io::Result<()> {
             let tag = CStr::from_bytes_with_nul(b"RustStdoutStderr\0").unwrap();
             let mut reader = BufReader::new(file);
             let mut buffer = String::new();
             loop {
                 buffer.clear();
-                if let Ok(len) = reader.read_line(&mut buffer) {
-                    if len == 0 {
-                        break;
-                    } else if let Ok(msg) = CString::new(buffer.clone()) {
-                        android_log(Level::Info, tag, &msg);
-                    }
+                let len = reader.read_line(&mut buffer)?;
+                if len == 0 {
+                    break Ok(());
+                } else if let Ok(msg) = CString::new(buffer.clone()) {
+                    android_log(Level::Info, tag, &msg);
                 }
             }
         });
